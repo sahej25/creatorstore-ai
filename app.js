@@ -121,6 +121,7 @@ async function showDashboard() {
   $("dashWelcome").textContent = `Welcome, ${currentUser?.user_metadata?.display_name || currentUser?.email?.split("@")[0] || "creator"}. ✳`;
   $("accountEmail").textContent = currentUser?.email || "";
   await loadProducts();
+  await loadStoreProfile();
 }
 function closeDashboard() {
   $("dashboardPreview").classList.remove("active");
@@ -137,83 +138,32 @@ async function loadProducts() {
   products = data || [];
   renderProducts();
 }
-
 function renderProducts() {
   const list = $("dashProductList");
-
   if (!products.length) {
-    list.innerHTML =
-      '<div class="empty-note">No products yet. Add your first product to start building your store.</div>';
+    list.innerHTML = '<div class="empty-note">No products yet. Add your first product to start building your store.</div>';
   } else {
     list.innerHTML = products.map(p => `
       <div class="dash-product">
-        <div class="mini-art ${
-          p.product_type === "course" ? "art-lilac" :
-          p.product_type === "coaching" ? "art-blue" : "art-peach"
-        }">
-          ${p.product_type === "course" ? "▤" :
-            p.product_type === "coaching" ? "✦" : "✎"}
-        </div>
-
-        <div class="dash-product-info">
-          <strong>${esc(p.name)}</strong>
-          <small>${esc(p.product_type.replaceAll("_", " "))}</small>
-          <small>${p.is_published ? "Published" : "Draft"}</small>
-        </div>
-
+        <div class="mini-art ${p.product_type === "course" ? "art-lilac" : p.product_type === "coaching" ? "art-blue" : "art-peach"}">${p.product_type === "course" ? "▤" : p.product_type === "coaching" ? "✦" : "✎"}</div>
+        <div class="dash-product-info"><strong>${esc(p.name)}</strong><small>${esc(p.product_type.replaceAll("_"," "))}</small><small>${p.is_published ? "Published" : "Draft"}</small></div>
         <span class="dash-price">${money(p.price_inr)}</span>
-
-        <button
-          class="publish-product"
-          data-id="${esc(p.id)}"
-          type="button">
-          ${p.is_published ? "Unpublish" : "Publish"}
-        </button>
-
-        <button
-          class="remove-product"
-          data-id="${esc(p.id)}"
-          aria-label="Delete ${esc(p.name)}"
-          type="button"
-          style="border:0;background:transparent;color:#999;font-size:16px">
-          ×
-        </button>
-      </div>
-    `).join("");
-
-    list.querySelectorAll(".publish-product").forEach(button => {
-      button.addEventListener("click", () =>
-        toggleProduct(button.dataset.id)
-      );
-    });
-
-    list.querySelectorAll(".remove-product").forEach(button => {
-      button.addEventListener("click", () =>
-        deleteProduct(button.dataset.id)
-      );
-    });
+        <button class="publish-product" data-id="${esc(p.id)}" type="button">${p.is_published ? "Unpublish" : "Publish"}</button>
+        <button class="remove-product" data-id="${esc(p.id)}" aria-label="Delete ${esc(p.name)}" style="border:0;background:transparent;color:#999;font-size:16px" type="button">×</button>
+      </div>`).join("");
+    list.querySelectorAll(".publish-product").forEach(b => b.addEventListener("click", () => toggleProduct(b.dataset.id)));
+    list.querySelectorAll(".remove-product").forEach(b => b.addEventListener("click", () => deleteProduct(b.dataset.id)));
   }
-
   $("productCount").textContent = products.length;
 }
 
 async function toggleProduct(id) {
   const product = products.find(p => p.id === id);
   if (!product || !supabaseClient || !currentUser) return;
-
   const nextStatus = !product.is_published;
-
-  const { error } = await supabaseClient
-    .from("products")
-    .update({ is_published: nextStatus })
-    .eq("id", id)
-    .eq("creator_id", currentUser.id);
-
-  if (error) {
-    toast("Could not update product: " + error.message);
-    return;
-  }
-
+  const { error } = await supabaseClient.from("products").update({ is_published: nextStatus })
+    .eq("id", id).eq("creator_id", currentUser.id);
+  if (error) { toast("Could not update product: " + error.message); return; }
   await loadProducts();
   toast(nextStatus ? "Product published!" : "Product unpublished.");
 }
@@ -259,13 +209,123 @@ function openStart() {
   openAuth("signup");
 }
 function copyStoreLink() {
-  const text = location.origin + location.pathname + "#store";
+  const text = $("storeUrl")?.value && $("storeUrl").value.startsWith("http") ? $("storeUrl").value : location.origin + location.pathname;
   if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(() => toast("Link copied!")).catch(() => toast(text));
   else toast("Store link: " + text);
 }
 
+
+async function renderPublicStore(slug) {
+  document.body.innerHTML = `
+    <div style="min-height:100vh;background:#f7f6f2;color:#25251f;font-family:'DM Sans',Arial,sans-serif">
+      <header style="max-width:1100px;margin:auto;padding:22px 5%;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #e6e3da">
+        <a href="/" style="text-decoration:none;color:inherit;font-weight:800;font-size:20px">creatorstore<span style="color:#929486">.ai</span></a>
+        <a href="/" style="color:inherit;font-size:13px">Create your own store ↗</a>
+      </header>
+      <main id="publicStoreContent" style="max-width:1100px;margin:auto;padding:52px 5% 80px">
+        <p style="color:#7e8b39;font-size:11px;letter-spacing:2px;font-weight:700">CREATOR STOREFRONT</p>
+        <p>Loading store…</p>
+      </main>
+      <footer style="text-align:center;padding:24px;color:#777;font-size:12px">Powered by CreatorStore AI</footer>
+    </div>`;
+  if (!supabaseClient) {
+    $("publicStoreContent").innerHTML = '<h1>Store unavailable</h1><p>Store connection is not configured. Please try again later.</p>';
+    return;
+  }
+  const safeSlug = String(slug || "").toLowerCase().trim();
+  const { data: profile, error: profileError } = await supabaseClient
+    .from("profiles")
+    .select("id,display_name,store_slug,bio")
+    .eq("store_slug", safeSlug)
+    .maybeSingle();
+
+  if (profileError || !profile) {
+    $("publicStoreContent").innerHTML = '<h1>Store not found</h1><p>This creator store does not exist or is not public yet.</p><a href="/">Visit CreatorStore AI</a>';
+    return;
+  }
+
+  const { data: publicProducts, error: productsError } = await supabaseClient
+    .from("products")
+    .select("id,name,description,product_type,price_inr")
+    .eq("creator_id", profile.id)
+    .eq("is_published", true)
+    .order("created_at", { ascending: false });
+
+  if (productsError) {
+    $("publicStoreContent").innerHTML = '<h1>Unable to load products</h1><p>Please refresh and try again.</p>';
+    return;
+  }
+
+  const displayName = esc(profile.display_name || "Creator");
+  const bio = esc(profile.bio || "Discover my digital products and resources.");
+  const cards = (publicProducts || []).map(p => `
+    <article style="background:#fff;border:1px solid #e8e4db;border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:12px">
+      <div style="width:48px;height:48px;border-radius:13px;background:#e2edc9;display:grid;place-items:center;font-size:23px">✳</div>
+      <div style="font-size:10px;color:#83877a;text-transform:uppercase;letter-spacing:1px">${esc(String(p.product_type || "digital_download").replaceAll("_"," "))}</div>
+      <h2 style="font-size:20px;margin:0">${esc(p.name)}</h2>
+      <p style="font-size:14px;color:#73766d;line-height:1.65;margin:0">${esc(p.description || "A resource created for you.")}</p>
+      <div style="font-size:20px;font-weight:800;margin-top:auto">${money(p.price_inr)}</div>
+      <button type="button" disabled title="Checkout will be added in a later version" style="border:0;border-radius:10px;padding:13px;background:#25251f;color:#fff;font-weight:700;opacity:.75">Purchase coming soon</button>
+    </article>`).join("");
+
+  $("publicStoreContent").innerHTML = `
+    <section style="max-width:720px;margin:0 auto 38px;text-align:center">
+      <div style="width:72px;height:72px;border-radius:22px;background:#d9ef78;margin:0 auto 18px;display:grid;place-items:center;font-size:30px;font-weight:800">${displayName.charAt(0).toUpperCase()}</div>
+      <h1 style="font-size:clamp(34px,6vw,58px);letter-spacing:-2px;margin:0 0 14px">${displayName}'s store</h1>
+      <p style="color:#6e7068;font-size:16px;line-height:1.7">${bio}</p>
+      <p style="font-size:11px;color:#85877e;letter-spacing:1.5px;font-weight:700;margin-top:26px">EXPLORE THE COLLECTION</p>
+    </section>
+    ${publicProducts && publicProducts.length ? `<section style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:18px">${cards}</section>` : '<div style="background:#fff;border:1px solid #e8e4db;border-radius:16px;padding:28px;text-align:center;color:#73766d">This creator has not published any products yet.</div>'}`;
+}
+
+async function saveStoreProfile() {
+  if (!supabaseClient || !currentUser) return;
+  const slug = $("storeSlugInput").value.trim().toLowerCase();
+  const bio = $("storeBioInput").value.trim();
+  const displayName = $("storeNameInput").value.trim();
+  if (!/^[a-z0-9](?:[a-z0-9-]{1,28}[a-z0-9])?$/.test(slug)) {
+    toast("Use 3–30 characters: lowercase letters, numbers, and hyphens.");
+    return;
+  }
+  const button = $("saveStoreProfile");
+  button.disabled = true; button.textContent = "Saving…";
+  const { error } = await supabaseClient.from("profiles").upsert({
+    id: currentUser.id,
+    display_name: displayName || "Creator",
+    store_slug: slug,
+    bio
+  }, { onConflict: "id" });
+  button.disabled = false; button.textContent = "Save store details";
+  if (error) {
+    toast(error.code === "23505" ? "That store URL is already taken. Try another." : "Could not save store: " + error.message);
+    return;
+  }
+  $("storeUrl").value = location.origin + "/?store=" + encodeURIComponent(slug);
+  $("storeStatus").textContent = "Store profile saved";
+  toast("Store details saved!");
+}
+
+async function loadStoreProfile() {
+  if (!supabaseClient || !currentUser) return;
+  const { data, error } = await supabaseClient.from("profiles")
+    .select("display_name,store_slug,bio").eq("id", currentUser.id).maybeSingle();
+  if (error) { console.warn("Could not load store profile:", error.message); return; }
+  if (data) {
+    $("storeNameInput").value = data.display_name || "";
+    $("storeSlugInput").value = data.store_slug || "";
+    $("storeBioInput").value = data.bio || "";
+    $("storeUrl").value = data.store_slug ? location.origin + "/?store=" + encodeURIComponent(data.store_slug) : "Save a store URL to create your public link";
+    $("storeStatus").textContent = data.store_slug ? "Store profile saved" : "Not published";
+  }
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
   initSupabase();
+  const requestedStore = new URLSearchParams(window.location.search).get("store");
+  if (requestedStore) {
+    await renderPublicStore(requestedStore);
+    return;
+  }
   // Update modal/dashboard markup while retaining the original landing page.
   $("modalContinue").hidden = true;
   $("startBtn").addEventListener("click", openStart);
@@ -288,7 +348,16 @@ document.addEventListener("DOMContentLoaded", async () => {
       <div class="dash-stats"><article class="stat-card"><small>Total revenue</small><strong>₹0</strong><span>↗ Payments not connected yet</span></article><article class="stat-card"><small>Store visits</small><strong>—</strong><span>↗ Analytics coming later</span></article><article class="stat-card"><small>Products</small><strong id="productCount">0</strong><span>↗ Saved in Supabase</span></article></div>
       <div class="dash-columns"><section class="dash-panel"><div class="panel-title"><h2>Your products</h2><button id="dashAdd">＋ Add product</button></div><div id="dashProductList"></div>
       <div id="addProductPanel" hidden><form class="add-form" id="addProductForm"><label>Product name<input id="newProductName" placeholder="e.g. The Creator Playbook" maxlength="100" required></label><label>Description (optional)<input id="newProductDescription" placeholder="What will your customer get?" maxlength="500"></label><label>Product type<select id="newProductType"><option value="digital_download">Digital download</option><option value="course">Online course</option><option value="coaching">Coaching session</option><option value="template">Template pack</option><option value="membership">Membership</option></select></label><label>Price (INR)<input id="newProductPrice" type="number" min="0" step="1" placeholder="499" required></label><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-dark" type="submit">Save product</button><button class="dash-back" type="button" id="cancelAdd">Cancel</button></div></form></div></section>
-      <aside class="dash-panel"><div class="panel-title"><h2>Your public store</h2><span class="status-pill">Not published</span></div><div class="empty-note">Your creator account and product records are connected. Public store pages and customer checkout are the next build stage.</div><div class="store-link"><input id="storeUrl" aria-label="Store URL" readonly value="Store page coming next"><button id="copyLink">Copy</button></div><div style="margin-top:25px"><div class="panel-title"><h2>Next steps</h2></div><div class="empty-note">① Add your products<br>② Set up a public store slug<br>③ Securely deliver files<br>④ Connect verified checkout</div></div></aside></div>
+      <aside class="dash-panel"><div class="panel-title"><h2>Your public store</h2><span class="status-pill" id="storeStatus">Not published</span></div>
+      <form class="add-form" id="storeProfileForm">
+        <label>Store name<input id="storeNameInput" maxlength="70" placeholder="Your creator name" required></label>
+        <label>Store URL slug<input id="storeSlugInput" maxlength="30" pattern="[a-z0-9-]+" placeholder="e.g. sahej" required></label>
+        <small style="color:#777">Your public link will be creatorstore-ai.vercel.app/?store=your-slug</small>
+        <label>Store bio<input id="storeBioInput" maxlength="300" placeholder="What do you create?"></label>
+        <button class="btn btn-dark full-width" id="saveStoreProfile" type="submit">Save store details</button>
+      </form>
+      <div class="store-link" style="margin-top:14px"><input id="storeUrl" aria-label="Store URL" readonly value="Save a store URL to create your public link"><button id="copyLink">Copy</button></div>
+      <div class="empty-note" style="margin-top:14px">Only published products appear in your public store. Checkout is not enabled yet.</div></aside></div>
       <p style="text-align:center;font-size:10px;color:#88897f;margin-top:28px">CreatorStore AI · Payments are not enabled in this version.</p>
     </main>`;
   document.body.appendChild(dashboard);
@@ -299,6 +368,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   $("cancelAdd").addEventListener("click", hideAddProduct);
   $("addProductForm").addEventListener("submit", addProduct);
   $("copyLink").addEventListener("click", copyStoreLink);
+  $("storeProfileForm").addEventListener("submit", async e => { e.preventDefault(); await saveStoreProfile(); });
   document.addEventListener("keydown", e => { if (e.key === "Escape") { $("modalBackdrop").hidden = true; closeDashboard(); } });
   if (supabaseClient) {
     const { data } = await supabaseClient.auth.getSession();
