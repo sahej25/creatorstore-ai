@@ -1,31 +1,38 @@
-# CreatorStore AI — MVP 1
+# CreatorStore AI — Supabase-connected MVP
 
-A mobile-first Stan Store-inspired prototype built with HTML, CSS and vanilla JavaScript.
+## Files
+- `index.html`, `styles.css`: responsive landing page and styles
+- `app.js`: email signup/login and database-backed product management
+- `supabase-config.js`: your Project URL and publishable key (placeholders by default)
 
-## What works in this prototype
-- Responsive landing page and product category cards
-- Start / login demo modals
-- Interactive creator dashboard preview
-- Add and remove sample products (temporary browser-session state)
-- Demo store-link copy interaction
-- Mobile navigation
+## Configure Supabase
+1. In Supabase, open Project Settings → API Keys (or Connect).
+2. Copy Project URL and Publishable key.
+3. Open `supabase-config.js` and replace:
+   - `YOUR_PROJECT_URL` with your project URL
+   - `YOUR_PUBLISHABLE_KEY` with your `sb_publishable_...` key
+4. Do not use a secret key or service_role key in browser code.
 
-## Important limitations
-This is a front-end prototype, not a production marketplace yet. It does not have real accounts, a database, secure file delivery, checkout, payment verification, or permanent product storage. Dashboard metrics are illustrative and do not represent real analytics.
+## Deploy safely to a separate repository
+Upload/replace these files in the `creatorstore-ai` GitHub repository only:
+- `index.html`
+- `styles.css`
+- `app.js`
+- `supabase-config.js`
+- `README.md`
 
-## Preview locally
-Open `index.html` in a browser, or use VS Code Live Server.
+Commit to `main`; Vercel should redeploy from the connected repository.
 
-## Deploy as a separate GitHub + Vercel project
-1. Create a NEW GitHub repository named `creatorstore-ai` (do not use `quantcrack-ai`).
-2. Upload `index.html`, `styles.css`, `app.js`, and this README to the root of that new repository.
-3. In Vercel, choose **Add New → Project** and import the new `creatorstore-ai` repository.
-4. Framework preset: **Other**. Build command: leave blank. Output directory: leave blank / root, depending on the Vercel UI. This is a static HTML project.
-5. Deploy and test the generated URL on desktop and mobile.
+## Supabase prerequisites
+The initial SQL setup should have created `public.profiles` and `public.products` with RLS policies.
+For email confirmation, configure the Supabase Auth URL Configuration Site URL to your Vercel domain and add the local/deployed redirect URLs under allowed redirect URLs if needed.
 
-## Roadmap
-1. Connect Supabase Auth and database in a separate backend iteration.
-2. Add creator profiles and unique store slugs.
-3. Add private file storage and access rules.
-4. Integrate Razorpay with server-side payment verification and webhooks before enabling real purchases.
-5. Add orders, refunds, analytics, and creator settings.
+## Current functionality
+- Email/password signup and login through Supabase Auth
+- Profile row upsert for signed-in users
+- Insert, list, and delete products through Supabase RLS
+
+## Not included yet
+- Public creator store pages
+- Payments, order processing, protected downloads, courses, coaching calendar, or analytics
+- Profile slug editor and public read policies
