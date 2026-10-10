@@ -137,22 +137,87 @@ async function loadProducts() {
   products = data || [];
   renderProducts();
 }
+
 function renderProducts() {
   const list = $("dashProductList");
+
   if (!products.length) {
-    list.innerHTML = '<div class="empty-note">No products yet. Add your first product to start building your store.</div>';
+    list.innerHTML =
+      '<div class="empty-note">No products yet. Add your first product to start building your store.</div>';
   } else {
     list.innerHTML = products.map(p => `
       <div class="dash-product">
-        <div class="mini-art ${p.product_type === "course" ? "art-lilac" : p.product_type === "coaching" ? "art-blue" : "art-peach"}">${p.product_type === "course" ? "▤" : p.product_type === "coaching" ? "✦" : "✎"}</div>
-        <div class="dash-product-info"><strong>${esc(p.name)}</strong><small>${esc(p.product_type.replaceAll("_"," "))}</small></div>
+        <div class="mini-art ${
+          p.product_type === "course" ? "art-lilac" :
+          p.product_type === "coaching" ? "art-blue" : "art-peach"
+        }">
+          ${p.product_type === "course" ? "▤" :
+            p.product_type === "coaching" ? "✦" : "✎"}
+        </div>
+
+        <div class="dash-product-info">
+          <strong>${esc(p.name)}</strong>
+          <small>${esc(p.product_type.replaceAll("_", " "))}</small>
+          <small>${p.is_published ? "Published" : "Draft"}</small>
+        </div>
+
         <span class="dash-price">${money(p.price_inr)}</span>
-        <button class="remove-product" data-id="${esc(p.id)}" aria-label="Delete ${esc(p.name)}" style="border:0;background:transparent;color:#999;font-size:16px">×</button>
-      </div>`).join("");
-    list.querySelectorAll(".remove-product").forEach(b => b.addEventListener("click", () => deleteProduct(b.dataset.id)));
+
+        <button
+          class="publish-product"
+          data-id="${esc(p.id)}"
+          type="button">
+          ${p.is_published ? "Unpublish" : "Publish"}
+        </button>
+
+        <button
+          class="remove-product"
+          data-id="${esc(p.id)}"
+          aria-label="Delete ${esc(p.name)}"
+          type="button"
+          style="border:0;background:transparent;color:#999;font-size:16px">
+          ×
+        </button>
+      </div>
+    `).join("");
+
+    list.querySelectorAll(".publish-product").forEach(button => {
+      button.addEventListener("click", () =>
+        toggleProduct(button.dataset.id)
+      );
+    });
+
+    list.querySelectorAll(".remove-product").forEach(button => {
+      button.addEventListener("click", () =>
+        deleteProduct(button.dataset.id)
+      );
+    });
   }
+
   $("productCount").textContent = products.length;
 }
+
+async function toggleProduct(id) {
+  const product = products.find(p => p.id === id);
+  if (!product || !supabaseClient || !currentUser) return;
+
+  const nextStatus = !product.is_published;
+
+  const { error } = await supabaseClient
+    .from("products")
+    .update({ is_published: nextStatus })
+    .eq("id", id)
+    .eq("creator_id", currentUser.id);
+
+  if (error) {
+    toast("Could not update product: " + error.message);
+    return;
+  }
+
+  await loadProducts();
+  toast(nextStatus ? "Product published!" : "Product unpublished.");
+}
+
 function showAddProduct() { $("addProductPanel").hidden = false; $("newProductName").focus(); }
 function hideAddProduct() { $("addProductPanel").hidden = true; $("addProductForm").reset(); }
 async function addProduct(e) {
